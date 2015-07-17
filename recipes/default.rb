@@ -45,7 +45,7 @@ package node['squid']['package']
 # rhel_family sysconfig
 template '/etc/sysconfig/squid' do
   source 'redhat/sysconfig/squid.erb'
-  notifies :restart, "service[#{node['squid']['service_name']}]", :delayed
+  notifies :create, 'ruby_block[restart_squid]', :immediately
   mode 00644
   only_if { platform_family? 'rhel', 'fedora' }
 end
@@ -87,4 +87,17 @@ service node['squid']['service_name'] do
   supports :restart => true, :status => true, :reload => true
   provider Chef::Provider::Service::Upstart if platform?('ubuntu')
   action [:enable, :start]
+end
+
+# change start to restart action if any resource required it
+# inspired by answer at http://stackoverflow.com/questions/21066591/minimize-service-restarts-from-chef-notifications
+ruby_block 'restart_squid' do
+  block do
+    squid_service = resources(:service => node['squid']['service_name'])
+    squid_actions = Array.new(squid_service.action)
+    squid_actions  << :restart unless squid_actions.include?(:restart)
+    squid_actions.delete(:start) if squid_actions.include?(:restart)
+    squid_service.action(squid_actions)
+  end
+  action :nothing
 end
